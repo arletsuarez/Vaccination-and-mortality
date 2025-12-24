@@ -1,0 +1,2096 @@
+---
+title: "Avance 1 - Proyecto Bioestadística"
+format: html
+editor: visual
+---
+
+# I. Introduction
+
+## I.1 Relevance
+
+Routine childhood vaccination has played a key role in reducing infant mortality.However, significant inequalities in access persist between countries and regions.These disparities became more evident during the COVID-19 pandemic, which disrupted routine immunisation programmes and highlighted unequal vaccine distribution.Analysing the relationship between vaccination coverage and avoidable mortality from 2010 to 2023 allows for a global assessment of these structural disparities.
+
+## I.2 Objectives
+
+### I.2.1 General Objective
+
+To analyse the relationship between routine vaccination coverage and avoidable mortality across countries with different income levels during the period 2010–2023.
+
+### I.2.2 Specific Objectives
+
+-   To describe trends in vaccination coverage and avoidable mortality by country.
+-   To compare vaccination coverage across income-level groups.
+-   To evaluate the association between vaccination coverage and infant mortality, adjusting for socioeconomic variables.
+
+## I.3 Hypothesis
+
+Countries with lower vaccination coverage have higher rates of avoidable mortality.
+
+# II. Methodology
+
+## II.1 Study Design
+
+Cross-sectional ecological study
+
+## II.2 Data Sources
+
+-   WHO/UNICEF Joint Reporting Form of Immunization: routine vaccination
+-   WHO Global Health Observatory: mortality rate
+-   World Bank WDI: socioeconomic indicators (GDP per capita, health expenditure, etc.)
+-   Our World in Data (OWID): socioeconomic variables
+
+## II.3 Population
+
+Countries with available data from 2010 to 2023.
+
+## II.4 Variables
+
+| Variable | Role | Type of variable | Data source |
+|------------------------|---------------|------------------|---------------|
+| DTP3 coverage (%) | Independent | Continuous quantitative | WHO/UNICEF JRF |
+| Measles MCV1 coverage (%) | Independent | Continuous quantitative | WHO/UNICEF JRF |
+| COVID-19 vaccine coverage (%) | Independent | Continuous quantitative | OWID |
+| Mortality rate (\<5, x1000 LB) | Dependent | Continuous quantitative | WHO GHO |
+| Maternal mortality ( x1000 LB) | Dependent | Continuous quantitative | OWID |
+| GDP per capita (USD) | Confounder | Continuous quantitative | World Bank WDI |
+| Health expenditure (% del GDP) | Confounder | Continuous quantitative | World Bank WDI |
+| Literacy rate | Confounder | Continuous quantitative | World Bank WDI |
+
+## II.5 Importing database
+
+```{r}
+#install.packages("countrycode")
+#install.packages("gt")
+#install.packages("factoextra")
+#install.packages("broom")
+library(readxl)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(countrycode)
+library(stringr)
+library(gt)
+library(ggplot2)
+library(factoextra)
+library(infer)
+library(broom)
+library(knitr)
+library(readxl)
+library(cowplot)
+library(nycflights13)
+library(stringr)
+library(infer)
+library(datasets)
+library(corrplot)
+library(Hmisc)
+library(psych)
+library(skimr)
+library(rlang)
+library(estimatr)
+library(margins)
+library(stargazer)
+library(lmtest)
+library(broom)
+library(ggpubr)
+library(foreign)
+library(GGally)
+library(AICcmodavg)
+library(gridExtra)
+library(RVAideMemoire)
+library(rstatix)
+require(flexsurv)
+require(EnvStats)
+library(gtsummary)
+library(xfun)
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(ggalluvial)
+library(maps)
+library(mapdata)
+```
+
+```{r}
+db=read_csv("database.csv")
+```
+
+### Normality check for quantitative variables.
+
+Using histograms, QQ plots, and Kolmogorov-Smirnov test
+
+**COVERAGE**
+
+```{r}
+ggplot(db, aes(x = COVERAGE)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of Vaccine Coverage by Region")
+
+qqnorm(db$COVERAGE)
+qqline(db$COVERAGE)
+```
+
+```{r}
+ks.test(db$COVERAGE, "pnorm", mean(db$COVERAGE, na.rm=TRUE), sd(db$COVERAGE, na.rm=TRUE))
+```
+
+Vaccine COVERAGE does not follow a normal distribution.
+
+**GDP per capita (pbi_usd)**
+
+```{r}
+ggplot(db, aes(x = gdp_per_capita)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of GDP per Capita by Region")
+
+qqnorm(db$gdp_per_capita)
+qqline(db$gdp_per_capita)
+```
+
+```{r}
+ks.test(db$gdp_per_capita, "pnorm", mean(db$gdp_per_capita, na.rm=TRUE), sd(db$gdp_per_capita, na.rm=TRUE))
+```
+
+GDP per capita does not follow a normal distribution.
+
+**Health expenditure (% of GDP)**
+
+```{r}
+ggplot(db, aes(x = health_expenditure_pct_gdp)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of Health Expenditure (% GDP) by Region")
+
+qqnorm(db$health_expenditure_pct_gdp)
+qqline(db$health_expenditure_pct_gdp)
+```
+
+```{r}
+ks.test(db$health_expenditure_pct_gdp, "pnorm", mean(db$health_expenditure_pct_gdp, na.rm=TRUE), sd(db$health_expenditure_pct_gdp, na.rm=TRUE))
+```
+
+Health expenditure (% GDP) is not normally distributed.
+
+**Health expenditure per capita (PPP)**
+
+```{r}
+ggplot(db, aes(x = health_expenditure_ppp)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of Health Expenditure per Capita (PPP)")
+
+qqnorm(db$health_expenditure_ppp)
+qqline(db$health_expenditure_ppp)
+```
+
+```{r}
+ks.test(db$health_expenditure_ppp, "pnorm", mean(db$health_expenditure_ppp, na.rm=TRUE), sd(db$health_expenditure_ppp, na.rm=TRUE))
+```
+
+Health expenditure (PPP) is not normally distributed.
+
+**Literacy rate**
+
+```{r}
+ggplot(db, aes(x = literacy_rate)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of Literacy Rate by Region")
+
+qqnorm(db$literacy_rate)
+qqline(db$literacy_rate)
+```
+
+```{r}
+ks.test(db$literacy_rate, "pnorm", mean(db$literacy_rate, na.rm=TRUE), sd(db$literacy_rate, na.rm=TRUE))
+```
+
+Literacy rate does not follow a normal distribution.
+
+**Under-one mortality**
+
+```{r}
+
+ggplot(db, aes(x = under1_mortality)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of Under-Five Mortality Rate by Region")
+
+qqnorm(db$under1_mortality)
+qqline(db$under1_mortality)
+
+```
+
+```{r}
+ks.test(db$under1_mortality, "pnorm", mean(db$under1_mortality, na.rm=TRUE), sd(db$under1_mortality, na.rm=TRUE))
+
+```
+
+Under-five mortality is not normally distributed.
+
+**Maternal mortality**
+
+```{r}
+ggplot(db, aes(x = maternal_mortality)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "white") +
+  facet_wrap(~region) +
+  labs(title = "Distribution of Maternal Mortality Ratio by Region")
+
+qqnorm(db$maternal_mortality)
+qqline(db$maternal_mortality)
+```
+
+```{r}
+ks.test(db$maternal_mortality, "pnorm", mean(db$maternal_mortality, na.rm=TRUE), sd(db$maternal_mortality, na.rm=TRUE))
+```
+
+Maternal mortality is not normally distributed.
+
+#### Construction of Table 1
+
+```{r}
+# Main dataset correctly pivoted
+base_table1  <- db  %>%
+  
+  # Clean antigen names (they sometimes include trailing spaces)
+  mutate(ANTIGEN = str_trim(ANTIGEN)) %>% 
+  
+  # Create one column per vaccine
+  pivot_wider(
+    id_cols = c(
+      NAME, CODE, YEAR, region, gdp_per_capita,
+      under1_mortality, health_expenditure_pct_gdp, maternal_mortality, health_expenditure_ppp
+    ),
+    names_from = ANTIGEN,
+    values_from = COVERAGE
+  ) %>%
+  
+  # Standardize column names
+  rename(
+    dtp3_coverage  = DTPCV3,
+    measles_mcv2_coverage  = MCV2,
+    bcg_coverage  = BCG,
+    polio_pol3_coverage  = POL3,
+    hepb3_coverage  = HEPB3,
+    hib3_coverage  = HIB3
+  ) %>%
+  
+  # Classify countries into income groups using World Bank thresholds
+  mutate(
+    income_level  = case_when(
+      gdp_per_capita  <= 1135 ~ "1. Low income",
+      gdp_per_capita  > 1135 & gdp_per_capita  <= 4465 ~ "2. Lower-middle income",
+      gdp_per_capita  > 4465 & gdp_per_capita  <= 13845 ~ "3. Upper-middle income",
+      gdp_per_capita  > 13845 ~ "4. High income",
+      TRUE ~ "NA/Unknown"
+    )
+  ) %>%
+  
+  # Exclude unknown values
+  filter(income_level  != "NA/Unknown")
+
+```
+
+```{r}
+# Compute median and IQR (Q1–Q3) for all indicators by income group
+# This includes vaccine coverage, infant mortality, and GDP per capita
+table_1 <- base_table1 %>%
+  group_by(income_level) %>%
+  summarise(
+    # Coverage by vaccine
+    dtp3_med = median(dtp3_coverage, na.rm=TRUE),
+    dtp3_q1  = quantile(dtp3_coverage, 0.25, na.rm=TRUE),
+    dtp3_q3  = quantile(dtp3_coverage, 0.75, na.rm=TRUE),
+
+    mcv2_med = median(measles_mcv2_coverage, na.rm=TRUE),
+    mcv2_q1  = quantile(measles_mcv2_coverage, 0.25, na.rm=TRUE),
+    mcv2_q3  = quantile(measles_mcv2_coverage, 0.75, na.rm=TRUE),
+
+    bcg_med = median(bcg_coverage, na.rm=TRUE),
+    bcg_q1  = quantile(bcg_coverage, 0.25, na.rm=TRUE),
+    bcg_q3  = quantile(bcg_coverage, 0.75, na.rm=TRUE),
+
+    polio_med = median(polio_pol3_coverage, na.rm=TRUE),
+    polio_q1  = quantile(polio_pol3_coverage, 0.25, na.rm=TRUE),
+    polio_q3  = quantile(polio_pol3_coverage, 0.75, na.rm=TRUE),
+
+    hepb_med = median(hepb3_coverage, na.rm=TRUE),
+    hepb_q1  = quantile(hepb3_coverage, 0.25, na.rm=TRUE),
+    hepb_q3  = quantile(hepb3_coverage, 0.75, na.rm=TRUE),
+
+    hib_med = median(hib3_coverage, na.rm=TRUE),
+    hib_q1  = quantile(hib3_coverage, 0.25, na.rm=TRUE),
+    hib_q3  = quantile(hib3_coverage, 0.75, na.rm=TRUE),
+
+    # Infant mortality
+    u1mr_med = median(under1_mortality, na.rm=TRUE),
+    u1mr_q1  = quantile(under1_mortality, 0.25, na.rm=TRUE),
+    u1mr_q3  = quantile(under1_mortality, 0.75, na.rm=TRUE),
+
+    # GDP per capita
+    gdp_med = median(gdp_per_capita, na.rm=TRUE),
+    gdp_q1  = quantile(gdp_per_capita, 0.25, na.rm=TRUE),
+    gdp_q3  = quantile(gdp_per_capita, 0.75, na.rm=TRUE),
+
+    n = n()
+  ) %>%
+  ungroup()
+
+```
+
+```{r}
+# Kruskal-Wallis test for differences by income group
+
+pvals <- tibble(
+  variable = c("dtp3","mcv2","bcg","polio","hepb","hib","mi","pib"),
+  pvalue = c(
+    kruskal.test(dtp3_coverage ~ income_level, data = base_table1)$p.value,
+    kruskal.test(measles_mcv2_coverage ~ income_level, data = base_table1)$p.value,
+    kruskal.test(bcg_coverage ~ income_level, data = base_table1)$p.value,
+    kruskal.test(polio_pol3_coverage ~ income_level, data = base_table1)$p.value,
+    kruskal.test(hepb3_coverage ~ income_level, data = base_table1)$p.value,
+    kruskal.test(hib3_coverage ~ income_level, data = base_table1)$p.value,
+    kruskal.test(under1_mortality ~ income_level, data = base_table1)$p.value,
+    kruskal.test(gdp_per_capita ~ income_level, data = base_table1)$p.value
+  )
+) %>%
+  # Format p-values for display in the table
+  mutate(
+    pvalue_fmt = ifelse(pvalue < 0.001, "<0.001", round(pvalue, 3))
+  )
+
+```
+
+```{r}
+# Format median and IQR into text
+table_1_fmt <- table_1 %>%
+  mutate(
+    dtp3 = paste0(
+      sprintf("%.0f", dtp3_med),
+      "<br>(",
+      sprintf("%.0f–%.0f", dtp3_q1, dtp3_q3),
+      ")"
+    ),
+    mcv2 = paste0(
+      sprintf("%.0f", mcv2_med),
+      "<br>(",
+      sprintf("%.0f–%.0f", mcv2_q1, mcv2_q3),
+      ")"
+    ),
+    bcg = paste0(
+      sprintf("%.0f", bcg_med),
+      "<br>(",
+      sprintf("%.0f–%.0f", bcg_q1, bcg_q3),
+      ")"
+    ),
+    polio = paste0(
+      sprintf("%.0f", polio_med),
+      "<br>(",
+      sprintf("%.0f–%.0f", polio_q1, polio_q3),
+      ")"
+    ),
+    hepb = paste0(
+      sprintf("%.0f", hepb_med),
+      "<br>(",
+      sprintf("%.0f–%.0f", hepb_q1, hepb_q3),
+      ")"
+    ),
+    hib = paste0(
+      sprintf("%.0f", hib_med),
+      "<br>(",
+      sprintf("%.0f–%.0f", hib_q1, hib_q3),
+      ")"
+    ),
+    u1mr = paste0(
+      sprintf("%.1f", u1mr_med),
+      "<br>(",
+      sprintf("%.1f–%.1f", u1mr_q1, u1mr_q3),
+      ")"
+    ),
+    gdp = paste0(
+      format(round(gdp_med), big.mark = ","),
+      "<br>(",
+      format(round(gdp_q1), big.mark = ","), "–",
+      format(round(gdp_q3), big.mark = ","), ")"
+    )
+  ) %>%
+  select(
+    income_level,
+    dtp3, mcv2, bcg, polio, hepb, hib,
+    u1mr, gdp
+  )
+
+```
+
+```{r}
+# Add a row containing the formatted p-values for each indicator
+pvals_row <- tibble(
+  income_level = "p-value (K-W)",
+  dtp3  = pvals$pvalue_fmt[pvals$variable=="dtp3"],
+  mcv2  = pvals$pvalue_fmt[pvals$variable=="mcv2"],
+  bcg   = pvals$pvalue_fmt[pvals$variable=="bcg"],
+  polio = pvals$pvalue_fmt[pvals$variable=="polio"],
+  hepb  = pvals$pvalue_fmt[pvals$variable=="hepb"],
+  hib   = pvals$pvalue_fmt[pvals$variable=="hib"],
+  u1mr    = pvals$pvalue_fmt[pvals$variable=="mi"],
+  gdp   = pvals$pvalue_fmt[pvals$variable=="pib"]
+)
+
+
+```
+
+```{r}
+table_1_with_pvals <- bind_rows(
+  table_1_fmt,
+  pvals_row
+)
+
+```
+
+```{r}
+# Build and display final summary table
+final_table1 <- table_1_with_pvals %>%
+  gt() %>%
+  
+  fmt_markdown(everything())%>%
+  
+  tab_header(
+    title = md("**Table 1: Vaccination coverage, infant mortality and GDP per capita by income level**")
+  ) %>%
+  tab_footnote(
+    footnote = md("Note. Values expressed as median (Q1–Q3). Mortality rate is per 1,000 live births. The bottom row shows p-values from Kruskal–Wallis tests.")
+  ) %>%
+  # Rename table column headers
+  cols_label(
+  income_level = "Income level",
+  dtp3 = "ICV DTP3",
+  mcv2 = "ICV Sarampión (MCV2)",
+  bcg = "ICV BCG",
+  polio = "ICV Polio (POL3)",
+  hepb = "ICV Hepatitis B (HEPB3)",
+  hib = "ICV Hib (Hib3)",
+  u1mr = "Infant mortality ",
+  gdp = "GDP per capita (USD)")%>%
+  cols_align(align = "center") %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(rows = income_level == "p-value (K-W)")
+  )
+
+```
+
+#### Construction of Table 2
+
+**Tabla 2 de regresión**
+
+```{r}
+base_table1$income_level <- factor(
+  base_table1$income_level,
+  levels = c(
+    "4. High income",
+    "3. Upper-middle income",
+    "2. Lower-middle income",
+    "1. Low income"
+  )
+)
+
+
+model <- lm(
+  under1_mortality ~ income_level +
+    dtp3_coverage + measles_mcv2_coverage +
+    bcg_coverage + polio_pol3_coverage +
+    hepb3_coverage + hib3_coverage ,
+  data = base_table1
+)
+
+model_table <- tidy(model, conf.int = TRUE)
+
+
+```
+
+```{r}
+table2 <- model_table %>%
+  mutate(
+    beta_ci = sprintf("%.2f (%.2f–%.2f)", estimate, conf.low, conf.high),
+    pvalue_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  select(term, beta_ci, pvalue_fmt)
+
+table2 <- table2 %>%
+  mutate(
+    term = case_when(
+      term == "(Intercept)" ~ "Reference: High Income",
+      term == "income_level1. Low income" ~ "Low Income",
+      term == "income_level2. Lower-middle income" ~ "Lower-Middle Income",
+      term == "income_level3. Upper-middle income" ~ "Upper-Middle Income",
+      term == "dtp3_coverage" ~ "DTP3 Coverage",
+      term == "measles_mcv2_coverage" ~ "Measles Coverage (MCV2)",
+      term == "bcg_coverage" ~ "BCG Coverage",
+      term == "polio_pol3_coverage" ~ "Polio Coverage (POL3)",
+      term == "hepb3_coverage" ~ "Hep B Coverage (HEPB3)",
+      term == "hib3_coverage" ~ "Hib Coverage (HIB3)",
+      TRUE ~ term
+    )
+  )
+
+table2 <- table2 %>%
+  mutate(
+    beta_ci = ifelse(term == "Reference: High Income", "", beta_ci),
+    pvalue_fmt = ifelse(term == "Reference: High Income", "", pvalue_fmt)
+  )
+
+```
+
+```{r}
+table2_gt <- table2 %>%
+  gt() %>%
+  tab_header(
+    title = md("**Table 2. Regression analysis of infant mortality by income level and vaccination     coverage.**")
+  ) %>%
+  cols_label(
+    term = "Associated factors",
+    beta_ci = "β (CI 95%)",
+    pvalue_fmt = "p value"
+  ) %>%
+  cols_align(align = "center", columns = c(beta_ci, pvalue_fmt)) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+```
+
+# III. Results
+
+## III.1 Vaccination coverage by year
+
+```{r}
+vaccines_of_interest <- c("DTPCV3", "MCV2", "POL3", "HEPB3", "BCG", "HIB3")
+
+summary_vac <- db %>%
+  filter(ANTIGEN %in% vaccines_of_interest, !is.na(COVERAGE)) %>%
+  group_by(YEAR, ANTIGEN) %>%
+  summarise(average_coverage = mean(COVERAGE, na.rm = TRUE), .groups = "drop")
+
+ggplot(summary_vac, aes(x = YEAR, y = average_coverage, color = ANTIGEN)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(#title = "Trends in vaccination coverage by year",
+       x = "Year",
+       y = "Average coverage(%)",
+       color = "Vaccine") +
+  theme_minimal() +
+  theme(legend.position = "right")
+```
+
+## III.3 Analisis
+
+###BCG Cluster analisis vaccination coverage
+
+```{r}
+vaccine_bcg <- db %>%
+  filter(ANTIGEN == "BCG")
+
+# Create country-by-year matrix
+cluster_table <- vaccine_bcg %>%
+  select(NAME, YEAR, COVERAGE) %>%
+  pivot_wider(names_from = YEAR, values_from = COVERAGE) %>%
+  drop_na()
+
+# Scale numeric data for k-means
+numeric_matrix <- cluster_table %>% select(-NAME)
+scaled_matrix <- scale(numeric_matrix)
+
+# Run k-means clustering
+set.seed(123)
+kmeans_fit <- kmeans(scaled_matrix, centers = 3, nstart = 25)
+cluster_table$cluster_id <- factor(kmeans_fit$cluster)
+
+cluster_order <- cluster_table %>%
+  pivot_longer(
+    cols = -c(NAME, cluster_id),
+    names_to = "YEAR",
+    values_to = "COVERAGE"
+  ) %>%
+  group_by(cluster_id) %>%
+  summarise(
+    overall_median = median(COVERAGE, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(overall_median) %>%
+  mutate(
+    coverage_level = factor(
+      cluster_id,
+      levels = cluster_id,
+      labels = c("Low coverage", "Medium coverage", "High coverage")
+    )
+  )
+
+# Join correct labels back to main table
+cluster_table <- cluster_table %>%
+  left_join(
+    cluster_order %>% select(cluster_id, coverage_level),
+    by = "cluster_id"
+  )
+
+pca_fit <- prcomp(scaled_matrix, center = TRUE, scale. = FALSE)
+pca_coords <- as.data.frame(pca_fit$x[, 1:2])
+colnames(pca_coords) <- c("Dim1", "Dim2")
+
+plot_data <- bind_cols(
+  cluster_table %>% select(NAME, coverage_level),
+  pca_coords
+)
+
+# Plot cluster structure
+ggplot(plot_data, aes(x = Dim1, y = Dim2, color = coverage_level)) +
+  geom_point(size = 2, alpha = 0.9) +
+  stat_ellipse(type = "norm", level = 0.95, linewidth = 0.8) +
+  labs(
+    title = "Cluster analysis of BCG vaccination coverage by country",
+    x = "Dim1",
+    y = "Dim2",
+    color = "Coverage level"
+  ) +
+  theme_minimal()
+
+```
+
+Temporal Evolution by coverage level
+
+```{r}
+# Convert data to long format
+long_data <- cluster_table %>%
+  pivot_longer(
+    cols = -c(NAME, cluster_id, coverage_level),
+    names_to = "YEAR",
+    values_to = "COVERAGE"
+  ) %>%
+  mutate(YEAR = as.numeric(YEAR))
+
+# Compute median coverage by level and year
+median_by_level <- long_data %>%
+  group_by(coverage_level, YEAR) %>%
+  summarise(
+    median_coverage = median(COVERAGE, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Plot temporal trends
+ggplot(
+  median_by_level,
+  aes(
+    x = YEAR,
+    y = median_coverage,
+    color = coverage_level,
+    group = coverage_level
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Median BCG vaccination coverage by coverage level and year",
+    x = "Year",
+    y = "Median coverage (%)",
+    color = "Coverage level"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+###DTP3 Cluster analisis vaccination coverage
+
+```{r}
+vaccine_dtp3 <- db %>%
+  filter(ANTIGEN == "DTPCV3")
+
+# Create country-by-year matrix
+cluster_table <- vaccine_dtp3 %>%
+  select(NAME, YEAR, COVERAGE) %>%
+  pivot_wider(names_from = YEAR, values_from = COVERAGE) %>%
+  drop_na()
+
+# Scale numeric data for k-means
+numeric_matrix <- cluster_table %>% select(-NAME)
+scaled_matrix <- scale(numeric_matrix)
+
+# Run k-means clustering
+set.seed(123)
+kmeans_fit <- kmeans(scaled_matrix, centers = 3, nstart = 25)
+cluster_table$cluster_id <- factor(kmeans_fit$cluster)
+
+cluster_order <- cluster_table %>%
+  pivot_longer(
+    cols = -c(NAME, cluster_id),
+    names_to = "YEAR",
+    values_to = "COVERAGE"
+  ) %>%
+  group_by(cluster_id) %>%
+  summarise(
+    overall_median = median(COVERAGE, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(overall_median) %>%
+  mutate(
+    coverage_level = factor(
+      cluster_id,
+      levels = cluster_id,
+      labels = c("Low coverage", "Medium coverage", "High coverage")
+    )
+  )
+
+# Join correct labels back to main table
+cluster_table <- cluster_table %>%
+  left_join(
+    cluster_order %>% select(cluster_id, coverage_level),
+    by = "cluster_id"
+  )
+
+pca_fit <- prcomp(scaled_matrix, center = TRUE, scale. = FALSE)
+pca_coords <- as.data.frame(pca_fit$x[, 1:2])
+colnames(pca_coords) <- c("Dim1", "Dim2")
+
+plot_data <- bind_cols(
+  cluster_table %>% select(NAME, coverage_level),
+  pca_coords
+)
+
+# Plot cluster structure
+ggplot(plot_data, aes(x = Dim1, y = Dim2, color = coverage_level)) +
+  geom_point(size = 2, alpha = 0.9) +
+  stat_ellipse(type = "norm", level = 0.95, linewidth = 0.8) +
+  labs(
+    #title = "Cluster analysis of DTPCV3 vaccination coverage by country",
+    x = "Dim1",
+    y = "Dim2",
+    color = "Coverage level"
+  ) +
+  theme_minimal()
+
+```
+
+Temporal Evolution by coverage level
+
+```{r}
+# Convert data to long format
+long_data <- cluster_table %>%
+  pivot_longer(
+    cols = -c(NAME, cluster_id, coverage_level),
+    names_to = "YEAR",
+    values_to = "COVERAGE"
+  ) %>%
+  mutate(YEAR = as.numeric(YEAR))
+
+# Compute median coverage by level and year
+median_by_level <- long_data %>%
+  group_by(coverage_level, YEAR) %>%
+  summarise(
+    median_coverage = median(COVERAGE, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Plot temporal trends
+ggplot(
+  median_by_level,
+  aes(
+    x = YEAR,
+    y = median_coverage,
+    color = coverage_level,
+    group = coverage_level
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Median DTPCV3 vaccination coverage by coverage level and year",
+    x = "Year",
+    y = "Median coverage (%)",
+    color = "Coverage level"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+###MCV2 Cluster analisis vaccination coverage
+
+```{r}
+vaccine_mcv2 <- db %>%
+  filter(ANTIGEN == "MCV2")
+
+# Create country-by-year matrix
+cluster_table <- vaccine_mcv2 %>%
+  select(NAME, YEAR, COVERAGE) %>%
+  pivot_wider(names_from = YEAR, values_from = COVERAGE) %>%
+  drop_na()
+
+# Scale numeric data for k-means
+numeric_matrix <- cluster_table %>% select(-NAME)
+scaled_matrix <- scale(numeric_matrix)
+
+# Run k-means clustering
+set.seed(123)
+kmeans_fit <- kmeans(scaled_matrix, centers = 3, nstart = 25)
+cluster_table$cluster_id <- factor(kmeans_fit$cluster)
+
+cluster_order <- cluster_table %>%
+  pivot_longer(
+    cols = -c(NAME, cluster_id),
+    names_to = "YEAR",
+    values_to = "COVERAGE"
+  ) %>%
+  group_by(cluster_id) %>%
+  summarise(
+    overall_median = median(COVERAGE, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(overall_median) %>%
+  mutate(
+    coverage_level = factor(
+      cluster_id,
+      levels = cluster_id,
+      labels = c("Low coverage", "Medium coverage", "High coverage")
+    )
+  )
+
+# Join correct labels back to main table
+cluster_table <- cluster_table %>%
+  left_join(
+    cluster_order %>% select(cluster_id, coverage_level),
+    by = "cluster_id"
+  )
+
+pca_fit <- prcomp(scaled_matrix, center = TRUE, scale. = FALSE)
+pca_coords <- as.data.frame(pca_fit$x[, 1:2])
+colnames(pca_coords) <- c("Dim1", "Dim2")
+
+plot_data <- bind_cols(
+  cluster_table %>% select(NAME, coverage_level),
+  pca_coords
+)
+
+# Plot cluster structure
+ggplot(plot_data, aes(x = Dim1, y = Dim2, color = coverage_level)) +
+  geom_point(size = 2, alpha = 0.9) +
+  stat_ellipse(type = "norm", level = 0.95, linewidth = 0.8) +
+  labs(
+    title = "Cluster analysis of MCV2 vaccination coverage by country",
+    x = "Dim1",
+    y = "Dim2",
+    color = "Coverage level"
+  ) +
+  theme_minimal()
+
+```
+
+Temporal Evolution by coverage level
+
+```{r}
+# Convert data to long format
+long_data <- cluster_table %>%
+  pivot_longer(
+    cols = -c(NAME, cluster_id, coverage_level),
+    names_to = "YEAR",
+    values_to = "COVERAGE"
+  ) %>%
+  mutate(YEAR = as.numeric(YEAR))
+
+# Compute median coverage by level and year
+median_by_level <- long_data %>%
+  group_by(coverage_level, YEAR) %>%
+  summarise(
+    median_coverage = median(COVERAGE, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Plot temporal trends
+ggplot(
+  median_by_level,
+  aes(
+    x = YEAR,
+    y = median_coverage,
+    color = coverage_level,
+    group = coverage_level
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Median MCV2 vaccination coverage by coverage level and year",
+    x = "Year",
+    y = "Median coverage (%)",
+    color = "Coverage level"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+## III.3 Analisis de Clusters
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggalluvial)
+library(forcats)
+```
+
+```{r}
+years <- 2010:2023
+year_cols <- as.character(years)
+min_years_required <- 10
+
+base_clus <- db %>%
+  mutate(
+    YEAR = as.integer(YEAR),
+    COVERAGE = as.numeric(COVERAGE),
+    gdp_per_capita = as.numeric(gdp_per_capita)
+  ) %>%
+  # Exclude GDP missing so income_level is never NA
+  filter(!is.na(gdp_per_capita)) %>%
+  mutate(
+    income_level = case_when(
+      gdp_per_capita <= 1135 ~ "1. Low income",
+      gdp_per_capita > 1135 & gdp_per_capita <= 4465 ~ "2. Lower-middle income",
+      gdp_per_capita > 4465 & gdp_per_capita <= 13845 ~ "3. Upper-middle income",
+      gdp_per_capita > 13845 ~ "4. High income",
+      TRUE ~ NA_character_
+    )
+  )
+
+colors <- c(
+  "1. Low income"           = "#e76f51",
+  "2. Lower-middle income"  = "#2a9d8f",
+  "3. Upper-middle income"  = "#457b9d",
+  "4. High income"          = "#8d99ae"
+)
+
+vaccines <- c("DTPCV3","MCV2","HIB3","BCG","POL3","HEPB3")
+
+# 1. Principal Loop
+for (vac in vaccines) {
+  message("Processing vaccine: ", vac)
+
+  data_vac <- base_clus %>%
+    filter(ANTIGEN == vac, YEAR %in% years)
+
+  # 1.1 Country x Year matrix
+  wide_raw <- data_vac %>%
+    select(CODE, NAME, YEAR, COVERAGE) %>%
+    pivot_wider(names_from = YEAR, values_from = COVERAGE)
+
+  # Keep countries with enough observed years
+  wide_min_years <- wide_raw %>%
+    mutate(n_obs = rowSums(!is.na(across(all_of(year_cols))))) %>%
+    filter(n_obs >= min_years_required) %>%
+    select(-n_obs)
+
+  # For k-means: require complete time series
+  table_cluster <- wide_min_years %>%
+    drop_na(all_of(year_cols))
+
+  if (nrow(table_cluster) == 0) {
+    message("Omitted due to incomplete data after applying year rules.")
+    next
+  }
+
+  # 2. K-means (k=3)
+
+  X <- table_cluster %>% select(all_of(year_cols))
+  data_scaled <- scale(X)
+
+  set.seed(123)
+  km <- kmeans(data_scaled, centers = 3, nstart = 25)
+
+  # Raw cluster id
+  table_cluster <- table_cluster %>% mutate(Cluster_raw = km$cluster)
+
+  table_cluster <- table_cluster %>%
+    mutate(mean_cov = rowMeans(across(all_of(year_cols)), na.rm = TRUE))
+
+  cluster_order <- table_cluster %>%
+    group_by(Cluster_raw) %>%
+    summarise(cluster_mean = mean(mean_cov), .groups = "drop") %>%
+    arrange(cluster_mean)  # lowest -> highest
+
+  # Apply ordered labels
+  table_cluster$Cluster <- factor(
+    table_cluster$Cluster_raw,
+    levels = cluster_order$Cluster_raw,
+    labels = c("Low coverage", "Medium coverage", "High coverage")
+  )
+
+  table_cluster <- table_cluster %>% select(-Cluster_raw, -mean_cov)
+
+  # 3. Add income level
+  table_income <- base_clus %>%
+    select(CODE, income_level) %>%
+    distinct(CODE, .keep_all = TRUE)
+
+  table_cluster <- table_cluster %>%
+    left_join(table_income, by = "CODE") %>%
+    filter(!is.na(income_level))
+
+  table_cluster$income_level <- factor(
+    table_cluster$income_level,
+    levels = c(
+      "1. Low income",
+      "2. Lower-middle income",
+      "3. Upper-middle income",
+      "4. High income"
+    )
+  )
+
+  # 4. FLOW table
+  flow_table <- table_cluster %>%
+    group_by(Cluster, income_level) %>%
+    summarise(n = n(), .groups = "drop")
+
+  if (sum(flow_table$n) == 0) {
+    message("Omitted due to empty FLOW table.")
+    next
+  }
+
+  # 5. Formatting
+  left_strata <- flow_table %>%
+    group_by(Cluster) %>%
+    summarise(total = sum(n), .groups = "drop") %>%
+    arrange(desc(Cluster)) %>%
+    mutate(
+      ymin = lag(cumsum(total), default = 0),
+      ymax = cumsum(total),
+      y_mid = (ymin + ymax) / 2,
+      pct   = paste0(round(100 * total / sum(total)), "%")
+    )
+
+  right_strata <- flow_table %>%
+    group_by(income_level) %>%
+    summarise(total = sum(n), .groups = "drop") %>%
+    arrange(desc(income_level)) %>%
+    mutate(
+      ymin = lag(cumsum(total), default = 0),
+      ymax = cumsum(total),
+      y_mid = (ymin + ymax) / 2,
+      pct   = paste0(round(100 * total / sum(total)), "%")
+    )
+
+  # 6. Alluvial plot
+  alluvial_p <- ggplot(
+    flow_table,
+    aes(axis1 = Cluster, axis2 = income_level, y = n)
+  ) +
+    geom_alluvium(aes(fill = income_level),
+                  alpha = 0.9, width = 0.25, color = NA, na.rm = TRUE) +
+    geom_stratum(aes(fill = income_level),
+                 width = 0.25, color = "white", na.rm = TRUE) +
+    # Left side labels
+    geom_text(
+      data = left_strata,
+      inherit.aes = FALSE,
+      aes(x = 0.45, y = y_mid, label = Cluster),
+      hjust = 1, size = 4.5, fontface = "bold"
+    ) +
+    geom_text(
+      data = left_strata,
+      inherit.aes = FALSE,
+      aes(x = 0.60, y = y_mid, label = pct),
+      hjust = 1, size = 4.2
+    ) +
+    # Right side labels
+    geom_text(
+      data = right_strata,
+      inherit.aes = FALSE,
+      aes(x = 2.15, y = y_mid, label = pct),
+      hjust = 0, size = 4.5, fontface = "bold"
+    ) +
+    geom_text(
+      data = right_strata,
+      inherit.aes = FALSE,
+      aes(x = 2.32, y = y_mid, label = income_level),
+      hjust = 0, size = 4.2
+    ) +
+    scale_x_discrete(labels = c("Coverage", "Income level")) +
+    scale_fill_manual(values = colors, drop = FALSE) +
+    labs(
+      title    = paste0("Distribution of income levels by coverage (", vac, ")"),
+      subtitle = "Epidemiological analysis, 2010–2023"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      panel.grid      = element_blank(),
+      legend.position = "none",
+      axis.text.y     = element_blank(),
+      axis.title.y    = element_blank(),
+      axis.text.x     = element_text(size = 10),
+      axis.title.x    = element_blank(),
+      plot.title      = element_text(size = 18, face = "bold"),
+      plot.subtitle   = element_text(size = 12, color = "grey40")
+    )
+
+  ggsave(
+    paste0("ALLUVIAL_", vac, ".png"),
+    alluvial_p,
+    width = 12, height = 7, dpi = 300,
+    limitsize = FALSE
+  )
+}
+
+```
+
+```{r}
+vars_needed <- c("dtp3_coverage","measles_mcv2_coverage","bcg_coverage",
+                 "polio_pol3_coverage","hepb3_coverage","hib3_coverage",
+                 "under1_mortality","gdp_per_capita","income_level","YEAR","cluster_vaccines","NAME","CODE")
+
+setdiff(vars_needed, names(base_table1)) -> missing_d
+if(length(missing_d)>0) warning("Columns are missing in base_table1: ", paste(missing_d, collapse = ", "))
+
+df <- base_table1 %>% 
+  mutate(
+    income_level = factor(income_level), 
+    cluster_vaccines = ifelse(!"cluster_vaccines" %in% names(.), NA, cluster_vaccines)
+  )
+
+df <- df %>%
+  rowwise() %>%
+  mutate(
+    VCI_median_plot = median(c_across(c(dtp3_coverage,measles_mcv2_coverage,
+                                         bcg_coverage,polio_pol3_coverage,
+                                         hepb3_coverage,hib3_coverage)), na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+
+long_cov <- df %>%
+  select(NAME, CODE, YEAR, income_level, under1_mortality,
+         dtp3_coverage, measles_mcv2_coverage, bcg_coverage,
+         polio_pol3_coverage, hepb3_coverage, hib3_coverage) %>%
+  pivot_longer(cols = ends_with("coverage"),
+               names_to = "vaccine", values_to = "coverage") %>%
+  mutate(vaccine = case_when(
+    vaccine == "dtp3_coverage" ~ "DTP3",
+    vaccine == "measles_mcv2_coverage" ~ "MCV2",
+    vaccine == "bcg_coverage" ~ "BCG",
+    vaccine == "polio_pol3_coverage" ~ "POL3",
+    vaccine == "hepb3_coverage" ~ "HEPB3",
+    vaccine == "hib3_coverage" ~ "Hib3",
+    TRUE ~ vaccine
+  )) %>%
+  filter(!is.na(coverage) & !is.na(under1_mortality))
+
+cors <- long_cov %>%
+  group_by(vaccine) %>%
+  summarise(rho = cor(coverage, under1_mortality, method = "spearman", use = "complete.obs"),
+            p = cor.test(coverage, under1_mortality, method = "spearman")$p.value,
+            n = n(), .groups = "drop") %>%
+  mutate(label = paste0("rho=", round(rho,2), "\n p=", ifelse(p<0.001,"<0.001",round(p,3))))
+
+gg3 <- ggplot(
+  long_cov,
+  aes(x = coverage, y = under1_mortality, color = income_level)
+) +
+  geom_point(alpha = 0.45, size = 1.4) +
+  geom_smooth(method = "loess", se = TRUE, color = "black", size = 0.8) +
+  facet_wrap(~vaccine, scales = "free_x") +
+  scale_color_viridis_d(option = "D", end = 0.9)  +
+  labs(
+    #title = "Infant mortality vs. vaccine coverage",
+    subtitle = "Colors indicate income level (World Bank classification)",
+    x = "Coverage (%)",
+    y = "Infant mortality (x1,000 live births)",
+    color = "Income level"
+  ) +
+  theme_minimal(base_size = 11) +
+  geom_text(
+    data = cors,
+    aes(x = Inf, y = Inf, label = label),
+    hjust = 1.1, vjust = 1.1,
+    size = 3.2,
+    inherit.aes = FALSE
+  ) #run gg3 to view the plot
+```
+
+# Suplementary information
+
+S1 Table. Regression analysis of health expenditure (% of GDP) by income level and vaccination coverage.
+
+```{r}
+base_table1$income_level <- factor(
+  base_table1$income_level,
+  levels = c(
+    "4. High income",
+    "3. Upper-middle income",
+    "2. Lower-middle income",
+    "1. Low income"
+  )
+)
+
+
+model <- lm(
+  health_expenditure_pct_gdp ~ income_level +
+    dtp3_coverage + measles_mcv2_coverage +
+    bcg_coverage + polio_pol3_coverage +
+    hepb3_coverage + hib3_coverage ,
+  data = base_table1
+)
+
+model_table2 <- tidy(model, conf.int = TRUE)
+
+
+```
+
+```{r}
+table_s1 <- model_table2 %>%
+  mutate(
+    beta_ci = sprintf("%.2f (%.2f–%.2f)", estimate, conf.low, conf.high),
+    pvalue_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  select(term, beta_ci, pvalue_fmt)
+
+table_s1 <- table_s1 %>%
+  mutate(
+    term = case_when(
+      term == "(Intercept)" ~ "Reference: High Income",
+      term == "income_level1. Low income" ~ "Low Income",
+      term == "income_level2. Lower-middle income" ~ "Lower-Middle Income",
+      term == "income_level3. Upper-middle income" ~ "Upper-Middle Income",
+      term == "dtp3_coverage" ~ "DTP3 Coverage",
+      term == "measles_mcv2_coverage" ~ "Measles Coverage (MCV2)",
+      term == "bcg_coverage" ~ "BCG Coverage",
+      term == "polio_pol3_coverage" ~ "Polio Coverage (POL3)",
+      term == "hepb3_coverage" ~ "Hep B Coverage (HEPB3)",
+      term == "hib3_coverage" ~ "Hib Coverage (HIB3)",
+      TRUE ~ term
+    )
+  )
+
+table_s1 <- table_s1 %>%
+  mutate(
+    beta_ci = ifelse(term == "Reference: High Income", "", beta_ci),
+    pvalue_fmt = ifelse(term == "Reference: High Income", "", pvalue_fmt)
+  )
+
+```
+
+```{r}
+table_s1_gt <- table_s1 %>%
+  gt() %>%
+  tab_header(
+    title = md("**S1 Table. Regression analysis of health expenditure (% of GDP) by income level and vaccination coverage.**")
+  ) %>%
+  cols_label(
+    term = "Associated factors",
+    beta_ci = "β (CI 95%)",
+    pvalue_fmt = "p value"
+  ) %>%
+  cols_align(align = "center", columns = c(beta_ci, pvalue_fmt)) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+```
+
+S2 Table. Regression analysis of health expenditure per capita (PPP) by income level and vaccination coverage.
+
+```{r}
+base_table1$income_level <- factor(
+  base_table1$income_level,
+  levels = c(
+    "4. High income",
+    "3. Upper-middle income",
+    "2. Lower-middle income",
+    "1. Low income"
+  )
+)
+
+
+model <- lm(
+  health_expenditure_ppp ~ income_level +
+    dtp3_coverage + measles_mcv2_coverage +
+    bcg_coverage + polio_pol3_coverage +
+    hepb3_coverage + hib3_coverage ,
+  data = base_table1
+)
+
+model_table3 <- tidy(model, conf.int = TRUE)
+
+
+```
+
+```{r}
+table_s2 <- model_table3 %>%
+  mutate(
+    beta_ci = sprintf("%.2f (%.2f–%.2f)", estimate, conf.low, conf.high),
+    pvalue_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  select(term, beta_ci, pvalue_fmt)
+
+table_s2 <- table_s2 %>%
+  mutate(
+    term = case_when(
+      term == "(Intercept)" ~ "Reference: High Income",
+      term == "income_level1. Low income" ~ "Low Income",
+      term == "income_level2. Lower-middle income" ~ "Lower-Middle Income",
+      term == "income_level3. Upper-middle income" ~ "Upper-Middle Income",
+      term == "dtp3_coverage" ~ "DTP3 Coverage",
+      term == "measles_mcv2_coverage" ~ "Measles Coverage (MCV2)",
+      term == "bcg_coverage" ~ "BCG Coverage",
+      term == "polio_pol3_coverage" ~ "Polio Coverage (POL3)",
+      term == "hepb3_coverage" ~ "Hep B Coverage (HEPB3)",
+      term == "hib3_coverage" ~ "Hib Coverage (HIB3)",
+      TRUE ~ term
+    )
+  )
+
+table_s2 <- table_s2 %>%
+  mutate(
+    beta_ci = ifelse(term == "Reference: High Income", "", beta_ci),
+    pvalue_fmt = ifelse(term == "Reference: High Income", "", pvalue_fmt)
+  )
+
+```
+
+```{r}
+table_s2_gt <- table_s2 %>%
+  gt() %>%
+  tab_header(
+    title = md("**S2 Table. Regression analysis of health expenditure per capita (PPP) by income level and vaccination coverage.**")
+  ) %>%
+  cols_label(
+    term = "Associated factors",
+    beta_ci = "β (CI 95%)",
+    pvalue_fmt = "p value"
+  ) %>%
+  cols_align(align = "center", columns = c(beta_ci, pvalue_fmt)) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+```
+
+S3 Table. Country–year analytical dataset (2010–2023) — for income.
+
+```{r}
+
+vaccines <- c("BCG","DTPCV3","HEPB3","HIB3","MCV2","POL3")
+
+add_income_level <- function(gdp){
+  case_when(
+    gdp <= 1135 ~ "1. Low income",
+    gdp > 1135 & gdp <= 4465 ~ "2. Lower-middle income",
+    gdp > 4465 & gdp <= 13845 ~ "3. Upper-middle income",
+    gdp > 13845 ~ "4. High income",
+    TRUE ~ NA_character_
+  )
+}
+
+# Clean base
+db_clean <- db %>%
+  mutate(
+    GROUP = as.character(GROUP),
+    YEAR = as.integer(YEAR),
+    ANTIGEN = str_trim(ANTIGEN),
+    COVERAGE = as.numeric(COVERAGE),
+    gdp_per_capita = as.numeric(gdp_per_capita),
+    under1_mortality = as.numeric(under1_mortality),
+    maternal_mortality = as.numeric(maternal_mortality),
+    health_expenditure_pct_gdp = as.numeric(health_expenditure_pct_gdp),
+    health_expenditure_ppp = as.numeric(health_expenditure_ppp),
+    literacy_rate = as.numeric(literacy_rate)
+  ) %>%
+  filter(GROUP == "COUNTRIES", YEAR %in% 2010:2023) %>%
+  mutate(income_level = add_income_level(gdp_per_capita))
+
+# Coverage wide: one row per country-year
+cov_wide <- db_clean %>%
+  filter(ANTIGEN %in% vaccines) %>%
+  select(CODE, NAME, region, YEAR, ANTIGEN, COVERAGE) %>%
+  group_by(CODE, NAME, region, YEAR, ANTIGEN) %>%
+  summarise(COVERAGE = mean(COVERAGE, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = ANTIGEN, values_from = COVERAGE)
+
+meta <- db_clean %>%
+  distinct(
+    CODE, NAME, region, YEAR,
+    income_level,
+    gdp_per_capita, under1_mortality, maternal_mortality,
+    health_expenditure_pct_gdp, health_expenditure_ppp, literacy_rate
+  )
+
+Table_S3 <- meta %>%
+  left_join(cov_wide, by = c("CODE","NAME","region","YEAR")) %>%
+  arrange(income_level, region, NAME, YEAR)
+
+write_csv(Table_S3, "Table_S3_CountryYear_AnalyticalDataset_2010_2023.csv")
+
+gt_S3 <- Table_S3 %>%
+  gt(groupname_col = "income_level") %>%
+  tab_header(
+    title = md("**S3 Table. Country–year analytical dataset (2010–2023)**"),
+    subtitle = md("Countries grouped by income level; vaccine values are coverage (%)")
+  ) %>%
+  fmt_number(columns = where(is.numeric), decimals = 1) %>%
+  tab_options(row_group.font.weight = "bold", table.font.size = px(9))
+
+gt_S3
+write_csv(Table_S3, "Table_S3.csv")
+```
+
+S4 Table. Routine childhood vaccination coverage by income group (2010–2023). Values are median (Q1–Q3) coverage percentages
+
+```{r}
+Table_S4 <- db_clean %>%
+  filter(!is.na(income_level), ANTIGEN %in% vaccines) %>%
+  group_by(income_level, ANTIGEN) %>%
+  summarise(
+    med = median(COVERAGE, na.rm = TRUE),
+    q1  = quantile(COVERAGE, 0.25, na.rm = TRUE),
+    q3  = quantile(COVERAGE, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(value = sprintf("%.0f (%.0f–%.0f)", med, q1, q3)) %>%
+  select(income_level, ANTIGEN, value) %>%
+  pivot_wider(names_from = ANTIGEN, values_from = value) %>%
+  arrange(income_level)
+
+write_csv(Table_S4, "Table_S4_VaccineCoverage_by_income_full.csv")
+
+gt_S4 <- Table_S4 %>%
+  gt(rowname_col = "income_level") %>%
+  tab_header(
+    title = md("**S4 Table. Routine childhood vaccination coverage by income group (2010–2023)**"),
+    subtitle = md("Values are median (Q1–Q3) coverage percentages")
+  )
+
+gt_S4
+gtsave(gt_S4, "Table_S4_VaccineCoverage_by_income_full.html")
+
+```
+
+S5 (a,b,c,d) Tables.Countries included in alluvial analyses (2010–2023)
+
+```{r}
+vaccines <- c("BCG","DTPCV3","HEPB3","HIB3","MCV2","POL3")
+years <- 2010:2023
+year_cols <- as.character(years)
+
+add_income_level <- function(gdp){
+  case_when(
+    gdp <= 1135 ~ "Low income",
+    gdp > 1135 & gdp <= 4465 ~ "Lower-middle income",
+    gdp > 4465 & gdp <= 13845 ~ "Upper-middle income",
+    gdp > 13845 ~ "High income",
+    TRUE ~ NA_character_
+  )
+}
+
+# 1) CLEAN BASE
+db_clean <- db %>%
+  mutate(
+    GROUP = as.character(GROUP),
+    YEAR = as.integer(YEAR),
+    ANTIGEN = str_trim(ANTIGEN),
+    COVERAGE = as.numeric(COVERAGE),
+    gdp_per_capita = as.numeric(gdp_per_capita)
+  ) %>%
+  filter(GROUP == "COUNTRIES", YEAR %in% years) %>%
+  mutate(income_level = add_income_level(gdp_per_capita)) %>%
+  filter(!is.na(income_level))
+
+income_levels <- c(
+  "Low income",
+  "Lower-middle income",
+  "Upper-middle income",
+  "High income"
+)
+
+#2) FUNCTION: country list per vaccine (series complete + kmeans clusters)
+make_alluvial_country_table <- function(vac){
+
+  data_vac <- db_clean %>%
+    filter(ANTIGEN == vac, !is.na(COVERAGE)) %>%
+    select(CODE, NAME, YEAR, COVERAGE)
+
+  wide <- data_vac %>%
+    pivot_wider(names_from = YEAR, values_from = COVERAGE)
+
+  # STRICT: series complete 14/14 years
+  wide_complete <- wide %>%
+    drop_na(all_of(year_cols))
+
+  if (nrow(wide_complete) == 0) return(NULL)
+
+  X <- wide_complete %>% select(all_of(year_cols))
+  Xs <- scale(X)
+
+  set.seed(123)
+  km <- kmeans(Xs, centers = 3, nstart = 25)
+
+  out <- wide_complete %>%
+    mutate(
+      cluster_id = km$cluster,
+      median_cov = apply(as.matrix(select(., all_of(year_cols))), 1, median, na.rm = TRUE),
+      q1_cov     = apply(as.matrix(select(., all_of(year_cols))), 1, quantile, probs = 0.25, na.rm = TRUE),
+      q3_cov     = apply(as.matrix(select(., all_of(year_cols))), 1, quantile, probs = 0.75, na.rm = TRUE)
+    )
+
+  # Order clusters low -> high by median coverage
+  ord <- out %>%
+    group_by(cluster_id) %>%
+    summarise(m = mean(median_cov), .groups = "drop") %>%
+    arrange(m)
+
+  out$coverage_cluster <- factor(
+    out$cluster_id,
+    levels = ord$cluster_id,
+    labels = c("Low coverage", "Medium coverage", "High coverage")
+  )
+
+  # Attach income_level (stable mapping per country)
+  income_map <- db_clean %>%
+    distinct(CODE, NAME, income_level)
+
+  out %>%
+    left_join(income_map, by = c("CODE","NAME")) %>%
+    mutate(
+      coverage_value = paste0(
+        sprintf("%.0f", median_cov),
+        " (",
+        sprintf("%.0f–%.0f", q1_cov, q3_cov),
+        ")"
+      )
+    ) %>%
+    transmute(
+      Vaccine = vac,
+      Country = NAME,
+      CODE,
+      income_level,
+      coverage_cluster,
+      coverage_value
+    ) %>%
+    arrange(income_level, Vaccine, coverage_cluster, Country)
+}
+
+tbl_list <- lapply(vaccines, make_alluvial_country_table)
+Table_S5 <- bind_rows(tbl_list)
+
+letters_S5 <- c("a", "b", "c", "d")
+gt_tables_S5_by_income <- lapply(seq_along(income_levels), function(i){
+  
+  inc <- income_levels[i]
+  letter <- letters_S5[i]
+
+  df_inc <- Table_S5 %>%
+    filter(income_level == inc) %>%
+    select(Vaccine, Country, CODE, coverage_cluster, coverage_value) %>%
+    arrange(Vaccine, coverage_cluster, Country)
+
+  gt(df_inc, groupname_col = "Vaccine") %>%
+    cols_label(
+      Vaccine = "Vaccine",
+      Country = "Country",
+      CODE = "Code",
+      coverage_cluster = "Coverage cluster",
+      coverage_value = "Coverage %, median (Q1–Q3)"
+    ) %>%
+    tab_header(
+      title = md(paste0("**S5",letter, " Table. ",inc, " countries included in alluvial analyses (2010–2023)", "**")),
+      subtitle = md("Series complete (14/14 years). Clusters derived from k-means (k=3) on standardized annual coverage.")
+    ) %>%
+    tab_options(
+      row_group.font.weight = "bold",
+      table.font.size = px(10)
+    )
+})
+
+# Print
+gt_tables_S5_by_income[[1]] #S5a Table
+gt_tables_S5_by_income[[2]] #S5b Table
+gt_tables_S5_by_income[[3]] #S5c Table
+gt_tables_S5_by_income[[4]] #S5d Table
+
+
+```
+
+**Sensitive analysis excluding COVID-19 pandemic years**
+
+S6 Table. Sensitivity analysis excluding 2020–2021: under-1 mortality regression
+
+```{r}
+
+base_table1$income_level <- factor(
+  base_table1$income_level,
+  levels = c(
+    "4. High income",
+    "3. Upper-middle income",
+    "2. Lower-middle income",
+    "1. Low income"
+  )
+)
+
+base_nocovid <- base_table1 %>%
+  filter(!(YEAR %in% c(2020, 2021)))
+
+model_nocovid <- lm(
+  under1_mortality ~ income_level +
+    dtp3_coverage + measles_mcv2_coverage +
+    bcg_coverage + polio_pol3_coverage +
+    hepb3_coverage + hib3_coverage,
+  data = base_nocovid
+)
+
+model_table_s6 <- tidy(model_nocovid, conf.int = TRUE)
+
+table_s6 <- model_table_s6 %>%
+  mutate(
+    beta_ci = sprintf("%.2f (%.2f–%.2f)", estimate, conf.low, conf.high),
+    pvalue_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  select(term, beta_ci, pvalue_fmt) %>%
+  mutate(
+    term = case_when(
+      term == "(Intercept)" ~ "Reference: High Income",
+      term == "income_level1. Low income" ~ "Low Income",
+      term == "income_level2. Lower-middle income" ~ "Lower-Middle Income",
+      term == "income_level3. Upper-middle income" ~ "Upper-Middle Income",
+      term == "dtp3_coverage" ~ "DTP3 Coverage",
+      term == "measles_mcv2_coverage" ~ "Measles Coverage (MCV2)",
+      term == "bcg_coverage" ~ "BCG Coverage",
+      term == "polio_pol3_coverage" ~ "Polio Coverage (POL3)",
+      term == "hepb3_coverage" ~ "Hep B Coverage (HEPB3)",
+      term == "hib3_coverage" ~ "Hib Coverage (HIB3)",
+      TRUE ~ term
+    ),
+    beta_ci = ifelse(term == "Reference: High Income", "", beta_ci),
+    pvalue_fmt = ifelse(term == "Reference: High Income", "", pvalue_fmt)
+  )
+
+table_s6_gt <- table_s6 %>%
+  gt() %>%
+  tab_header(
+    title = md("**S6 Table. Sensitivity analysis excluding 2020–2021: under-1 mortality regression.**")
+  ) %>%
+  cols_label(
+    term = "Associated factors",
+    beta_ci = "β (CI 95%)",
+    pvalue_fmt = "p value"
+  ) %>%
+  cols_align("center", columns = c(beta_ci, pvalue_fmt)) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+table_s6_gt
+
+
+```
+
+S7 Table. Sensitivity analysis using GDP per capita (continuous, per 1,000 USD): under-1 mortality regression
+
+```{r}
+
+base_table1_s7 <- base_table1 %>%
+  mutate(gdp_per_1000 = gdp_per_capita / 1000)
+
+model_gdp_1000 <- lm(
+  under1_mortality ~ gdp_per_1000 +
+    dtp3_coverage + measles_mcv2_coverage +
+    bcg_coverage + polio_pol3_coverage +
+    hepb3_coverage + hib3_coverage,
+  data = base_table1_s7
+)
+
+model_table_s7 <- tidy(model_gdp_1000, conf.int = TRUE)
+
+table_s7 <- model_table_s7 %>%
+  mutate(
+    beta_ci = sprintf("%.2f (%.2f–%.2f)", estimate, conf.low, conf.high),
+    pvalue_fmt = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+  ) %>%
+  select(term, beta_ci, pvalue_fmt) %>%
+  mutate(
+    term = case_when(
+      term == "(Intercept)" ~ "Intercept",
+      term == "gdp_per_1000" ~ "GDP per capita (per 1,000 USD)",
+      term == "dtp3_coverage" ~ "DTP3 Coverage (DTPCV3)",
+      term == "measles_mcv2_coverage" ~ "Measles Coverage (MCV2)",
+      term == "bcg_coverage" ~ "BCG Coverage",
+      term == "polio_pol3_coverage" ~ "Polio Coverage (POL3)",
+      term == "hepb3_coverage" ~ "Hep B Coverage (HEPB3)",
+      term == "hib3_coverage" ~ "Hib Coverage (HIB3)",
+      TRUE ~ term
+    )
+  )
+
+table_s7_gt <- table_s7 %>%
+  gt() %>%
+  tab_header(
+    title = md("**S7 Table. Sensitivity analysis using GDP per capita (continuous, per 1,000 USD): under-1 mortality regression.**")
+  ) %>%
+  cols_label(
+    term = "Associated factors",
+    beta_ci = "β (CI 95%)",
+    pvalue_fmt = "p value"
+  ) %>%
+  cols_align(align = "center", columns = c(beta_ci, pvalue_fmt)) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  ) %>%
+  tab_footnote(
+    footnote = md("Note: GDP per capita was rescaled to units of 1,000 USD to facilitate interpretation of regression coefficients.")
+  )
+
+table_s7_gt
+
+```
+
+```{r}
+model_summary <- summary(model_gdp_1000)
+
+n_obs <- nobs(model_gdp_1000)
+r2 <- model_summary$r.squared
+r2_adj <- model_summary$adj.r.squared
+
+```
+
+```{r}
+table_s7_gt_final <- table_s7_gt %>%
+  tab_source_note(
+    source_note = md(
+      paste0(
+        "**Model information:** N = ", n_obs,
+        "; R² = ", sprintf("%.3f", r2),
+        "; Adjusted R² = ", sprintf("%.3f", r2_adj), "."
+      )
+    )
+  )
+
+table_s7_gt_final
+
+```
+
+## III.3 Clusters - Pandemic
+
+Figures S1-S6. Income distribution by trajectory cluster for all antigens.
+
+```{r}
+vaccines <- c("DTPCV3","MCV2","HIB3","BCG","POL3","HEPB3")
+
+pre_years      <- 2017:2019
+pandemic_years <- 2020:2021
+post_years     <- 2022:2023
+
+period_order <- c("Pre (2017–2019)", "Pandemic (2020–2021)", "Post (2022–2023)")
+
+k_clusters <- 3
+k_nstart <- 50
+set_seed <- 123
+
+income_levels <- c("Low income","Lower-middle income","Upper-middle income","High income")
+income_colors <- c(
+  "Low income"           = "#e76f51",
+  "Lower-middle income"  = "#2a9d8f",
+  "Upper-middle income"  = "#457b9d",
+  "High income"          = "#8d99ae"
+)
+
+
+# 1) Base for CLUSTERING
+base_clus <- db %>%
+  mutate(
+    YEAR = as.integer(YEAR),
+    COVERAGE = as.numeric(COVERAGE),
+    gdp_per_capita = as.numeric(gdp_per_capita)
+  ) %>%
+  filter(
+    !is.na(COVERAGE),
+    !is.na(gdp_per_capita)
+  ) %>%
+  mutate(
+    income_level = case_when(
+      gdp_per_capita <= 1135  ~ "Low income",
+      gdp_per_capita <= 4465  ~ "Lower-middle income",
+      gdp_per_capita <= 13845 ~ "Upper-middle income",
+      TRUE                    ~ "High income"
+    ),
+    income_level = factor(income_level, levels = income_levels)
+  )
+
+# 2) Main function per vaccine
+run_period_cluster_income <- function(vac, k = 3) {
+
+  message("=== Vaccine: ", vac, " ===")
+
+  # 1) Build period means per country
+  period_means <- base_clus %>%
+    filter(ANTIGEN == vac, YEAR %in% c(pre_years, pandemic_years, post_years)) %>%
+    mutate(
+      period = case_when(
+        YEAR %in% pre_years      ~ "Pre (2017–2019)",
+        YEAR %in% pandemic_years ~ "Pandemic (2020–2021)",
+        YEAR %in% post_years     ~ "Post (2022–2023)"
+      ),
+      period = factor(period, levels = period_order)
+    ) %>%
+    group_by(CODE, NAME, income_level, period) %>%
+    summarise(mean_cov = mean(COVERAGE, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = period, values_from = mean_cov)
+
+  # Require all 3 periods (no NA)
+  period_means_complete <- period_means %>%
+    drop_na(all_of(period_order))
+
+  if (nrow(period_means_complete) < k) {
+    message("Omitted: not enough complete countries for clustering.")
+    return(NULL)
+  }
+
+  # 2) Pattern-based k-means (within-country standardization)
+  X <- as.matrix(period_means_complete %>% select(all_of(period_order)))
+
+  # Remove non-finite rows (safety)
+  keep_finite <- apply(X, 1, function(r) all(is.finite(r)))
+  X <- X[keep_finite, , drop = FALSE]
+  period_means_complete <- period_means_complete[keep_finite, , drop = FALSE]
+
+  # Remove zero-variance rows (cannot standardize)
+  sd_row <- apply(X, 1, sd)
+  keep_var <- is.finite(sd_row) & sd_row > 0
+  X <- X[keep_var, , drop = FALSE]
+  period_means_complete <- period_means_complete[keep_var, , drop = FALSE]
+
+  if (nrow(period_means_complete) < k) {
+    message("Omitted: not enough countries after zero-variance removal.")
+    return(NULL)
+  }
+
+  X_scaled <- t(scale(t(X)))
+  stopifnot(all(is.finite(X_scaled)))
+
+  set.seed(set_seed)
+  km <- kmeans(X_scaled, centers = k, nstart = k_nstart)
+
+  period_means_complete <- period_means_complete %>%
+    mutate(cluster_id = km$cluster) %>%
+    mutate(
+      drop = .data[["Pandemic (2020–2021)"]] - .data[["Pre (2017–2019)"]],
+      recovery = .data[["Post (2022–2023)"]] - .data[["Pandemic (2020–2021)"]]
+    )
+
+  # 3) Label clusters by drop ranking (least drop -> most drop)
+  cluster_profiles_tmp <- period_means_complete %>%
+    group_by(cluster_id) %>%
+    summarise(drop_mean = mean(drop), .groups = "drop") %>%
+    arrange(desc(drop_mean))
+
+  label_map <- cluster_profiles_tmp %>%
+    mutate(cluster_label = c("Resilient","Moderate disruption","High disruption")) %>%
+    select(cluster_id, cluster_label)
+
+  period_means_complete <- period_means_complete %>%
+    left_join(label_map, by = "cluster_id") %>%
+    mutate(Cluster = factor(cluster_label,
+                            levels = c("Resilient","Moderate disruption","High disruption")))
+
+  # 4) Country list table
+  tbl_country_list <- period_means_complete %>%
+    select(
+      CODE, NAME, income_level, Cluster,
+      all_of(period_order),
+      drop, recovery
+    ) %>%
+    arrange(Cluster, income_level, NAME)
+
+  # 5) Cluster summary tables
+  tbl_cluster_sizes <- period_means_complete %>%
+    count(Cluster, name = "n") %>%
+    mutate(pct = round(100 * n / sum(n), 1))
+
+  tbl_cluster_profiles <- period_means_complete %>%
+    group_by(Cluster) %>%
+    summarise(
+      n = n(),
+      pre_mean = mean(.data[["Pre (2017–2019)"]]),
+      pandemic_mean = mean(.data[["Pandemic (2020–2021)"]]),
+      post_mean = mean(.data[["Post (2022–2023)"]]),
+      drop_mean = mean(drop),
+      recovery_mean = mean(recovery),
+      .groups = "drop"
+    )
+
+  tbl_cluster_income <- period_means_complete %>%
+    count(Cluster, income_level, name = "n") %>%
+    group_by(Cluster) %>%
+    mutate(pct_within_cluster = round(100 * n / sum(n), 1)) %>%
+    ungroup()
+
+  # 6) Trajectory plot (means by cluster)
+  traj_df <- period_means_complete %>%
+    select(CODE, Cluster, all_of(period_order)) %>%
+    pivot_longer(cols = all_of(period_order), names_to = "Period", values_to = "Coverage") %>%
+    mutate(Period = factor(Period, levels = period_order)) %>%
+    group_by(Cluster, Period) %>%
+    summarise(mean_cov = mean(Coverage), .groups = "drop")
+
+  p_traj <- ggplot(traj_df, aes(Period, mean_cov, group = Cluster, color = Cluster)) +
+    geom_line(linewidth = 1.2) +
+    geom_point(size = 2.5) +
+    labs(
+      title = paste0("Coverage change across pandemic periods (", vac, ")"),
+      subtitle = "K-means on within-country standardized period means",
+      x = "Epidemiological period",
+      y = "Mean coverage (%)"
+    ) +
+    theme_minimal(base_size = 12)
+
+  # 7) Alluvial (Cluster -> Income)
+  flow <- period_means_complete %>%
+    count(Cluster, income_level, name = "n") %>%
+    mutate(
+      Cluster = factor(Cluster, levels = c("Resilient","Moderate disruption","High disruption")),
+      income_level = factor(income_level, levels = income_levels)
+    )
+
+  left_strata <- flow %>%
+    group_by(Cluster) %>%
+    summarise(total = sum(n), .groups = "drop") %>%
+    arrange(desc(Cluster)) %>%
+    mutate(
+      ymin = lag(cumsum(total), default = 0),
+      ymax = cumsum(total),
+      y_mid = (ymin + ymax)/2,
+      pct = paste0(round(100 * total / sum(total)), "%")
+    )
+
+  right_strata <- flow %>%
+    group_by(income_level) %>%
+    summarise(total = sum(n), .groups = "drop") %>%
+    arrange(desc(income_level)) %>%
+    mutate(
+      ymin = lag(cumsum(total), default = 0),
+      ymax = cumsum(total),
+      y_mid = (ymin + ymax)/2,
+      pct = paste0(round(100 * total / sum(total)), "%")
+    )
+
+  p_alluvial <- ggplot(flow, aes(axis1 = Cluster, axis2 = income_level, y = n)) +
+    geom_alluvium(aes(fill = income_level), alpha = 0.9, width = 0.25, color = NA) +
+    geom_stratum(aes(fill = income_level), width = 0.25, color = "white") +
+    geom_text(data = left_strata, inherit.aes = FALSE,
+              aes(x = 0.45, y = y_mid, label = Cluster),
+              hjust = 1, size = 4.2, fontface = "bold") +
+    geom_text(data = left_strata, inherit.aes = FALSE,
+              aes(x = 0.60, y = y_mid, label = pct),
+              hjust = 1, size = 4.0) +
+    geom_text(data = right_strata, inherit.aes = FALSE,
+              aes(x = 2.15, y = y_mid, label = pct),
+              hjust = 0, size = 4.2, fontface = "bold") +
+    geom_text(data = right_strata, inherit.aes = FALSE,
+              aes(x = 2.32, y = y_mid, label = income_level),
+              hjust = 0, size = 4.0) +
+    scale_x_discrete(labels = c("Trajectory cluster", "Income level")) +
+    scale_fill_manual(values = income_colors, drop = FALSE) +
+    labs(
+      title = paste0("Income distribution by trajectory cluster (", vac, ")"),
+      subtitle = "No missing income levels (GDP required for inclusion)"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      panel.grid = element_blank(),
+      legend.position = "none",
+      axis.text.y = element_blank(),
+      axis.title.y = element_blank(),
+      axis.title.x = element_blank()
+    )
+
+  ggsave(paste0("PLOT_alluvial_", vac, ".png"), p_alluvial, width = 12, height = 7, dpi = 300)
+  
+  
+  
+  tbl_country_list %>%
+    mutate(
+      Vaccine = vac,
+      pre = .data[["Pre (2017–2019)"]],
+      pandemic = .data[["Pandemic (2020–2021)"]],
+      post = .data[["Post (2022–2023)"]],
+      drop = drop,
+      recovery = recovery
+    ) %>%
+    select(Vaccine, income_level, Cluster, CODE, Country = NAME,
+           pre, pandemic, post, drop, recovery)
+}
+
+results <- list()
+for (vac in vaccines) {
+  results[[vac]] <- run_period_cluster_income(vac, k = k_clusters)
+}
+results <- results[!sapply(results, is.null)]
+
+```
+
+S8 (a,b,c,d) Tables. Countries included in pandemic trajectory alluvials.
+
+```{r}
+tbl_list <- lapply(vaccines, function(vac) run_period_cluster_income(vac, k = k_clusters))
+tbl_list <- tbl_list[!sapply(tbl_list, is.null)]
+
+Table_Pandemic_Master <- bind_rows(tbl_list) %>%
+  mutate(
+    income_level = factor(income_level, levels = income_levels),
+    Cluster = factor(Cluster, levels = c("Resilient","Moderate disruption","High disruption"))
+  )
+
+letters_S8 <- c("a", "b", "c", "d")
+gt_tables_pandemic_by_income <- lapply(seq_along(income_levels), function(i){
+
+  inc <- income_levels[i]
+  letter <- letters_S8[i]
+  
+  df_inc <- Table_Pandemic_Master %>%
+    filter(income_level == inc) %>%
+    mutate(across(c(pre, pandemic, post, drop, recovery), ~ round(.x, 1))) %>%
+    arrange(Vaccine, Cluster, Country) %>%
+    select(Vaccine, Country, CODE, Cluster, pre, pandemic, post, drop, recovery)
+
+  gt(df_inc, groupname_col = "Vaccine") %>%
+    cols_label(
+      Country = "Country",
+      CODE = "Code",
+      Cluster = "Trajectory cluster",
+      pre = "Pre mean (2017–2019)",
+      pandemic = "Pandemic mean (2020–2021)",
+      post = "Post mean (2022–2023)",
+      drop = "Drop (Pandemic − Pre)",
+      recovery = "Recovery (Post − Pandemic)"
+    ) %>%
+    tab_header(
+      title = md(paste0("**S8", letter, " Table. ",inc," countries included in pandemic trajectory alluvials", "**")),
+      subtitle = md("Cluster labels derived from k-means (k=3) on within-country standardized period means.")
+    ) %>%
+    tab_options(
+      row_group.font.weight = "bold",
+      table.font.size = px(10)
+    ) %>%
+    cols_align("center")
+})
+
+gt_tables_pandemic_by_income[[1]] #S8a Table
+gt_tables_pandemic_by_income[[2]] #S8b Table
+gt_tables_pandemic_by_income[[3]] #S8c Table
+gt_tables_pandemic_by_income[[4]] #S8d Table
+
+
+```
